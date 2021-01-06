@@ -376,14 +376,14 @@ class JdSeckill(object):
         resp = self.session.get(url=url, params=payload, headers=headers)
         resp_json = parse_json(resp.text)
         reserve_url = resp_json.get('url')
-        self.timers.start()
+        # self.timers.start()  注释掉预约成功了
         while True:
             try:
                 self.session.get(url='https:' + reserve_url)
                 logger.info('预约成功，已获得抢购资格 / 您已成功预约过了，无需重复预约')
-                if global_config.getRaw('messenger', 'enable') == 'true':
-                    success_message = "预约成功，已获得抢购资格 / 您已成功预约过了，无需重复预约"
-                    send_wechat(success_message)
+                # if global_config.getRaw('messenger', 'enable') == 'true':
+                #     success_message = "预约成功，已获得抢购资格 / 您已成功预约过了，无需重复预约"
+                #     send_wechat(success_message)
                 break
             except Exception as e:
                 logger.error('预约失败正在重试...')
@@ -615,7 +615,7 @@ class JdSeckill(object):
             return True
         else:
             logger.info('抢购失败，返回信息:{}'.format(resp_json))
-            if global_config.getRaw('messenger', 'enable') == 'true':
-                error_message = '抢购失败，返回信息:{}'.format(resp_json)
-                send_wechat(error_message)
+            # if global_config.getRaw('messenger', 'enable') == 'true':
+            #     error_message = '抢购失败，返回信息:{}'.format(resp_json)
+            #     send_wechat(error_message)
             return False
