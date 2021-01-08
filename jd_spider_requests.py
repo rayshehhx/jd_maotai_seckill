@@ -270,8 +270,10 @@ class JdSeckill(object):
         self.qrlogin = QrLogin(self.spider_session)
 
         # 初始化信息
-        self.sku_id = global_config.getRaw('config', 'sku_id')
-        self.seckill_num = 2
+        self.sku_id = ''
+        self.appointment_sku_ids = global_config.getRaw('config', 'appointment_sku_ids')
+        self.buy_sku_ids = global_config.getRaw('config', 'buy_sku_ids')
+        self.seckill_num = 1
         self.seckill_init_info = dict()
         self.seckill_url = dict()
         self.seckill_order_data = dict()
@@ -318,21 +320,25 @@ class JdSeckill(object):
         self._reserve()
 
     @check_login
-    def seckill(self):
+    def seckill(self, skuid):
         """
         抢购
         """
+        self.sku_id=skuid
         self._seckill()
 
     @check_login
-    def seckill_by_proc_pool(self, work_count=5):
+    def seckill_by_proc_pool(self, work_count=2):
         """
         多进程进行抢购
         work_count：进程数量
         """
         with ProcessPoolExecutor(work_count) as pool:
-            for i in range(work_count):
-                pool.submit(self.seckill)
+            # 循环购买商品列表
+            buy_sku_ids = self.buy_sku_ids.split(',')
+            for skuid in buy_sku_ids:
+                for i in range(work_count):
+                    pool.submit(self.seckill(skuid))
 
     def _reserve(self):
         """
@@ -364,29 +370,36 @@ class JdSeckill(object):
         """商品预约"""
         logger.info('商品名称:{}'.format(self.get_sku_title()))
         url = 'https://yushou.jd.com/youshouinfo.action?'
-        payload = {
-            'callback': 'fetchJSON',
-            'sku': self.sku_id,
-            '_': str(int(time.time() * 1000)),
-        }
-        headers = {
-            'User-Agent': self.user_agent,
-            'Referer': 'https://item.jd.com/{}.html'.format(self.sku_id),
-        }
-        resp = self.session.get(url=url, params=payload, headers=headers)
-        resp_json = parse_json(resp.text)
-        reserve_url = resp_json.get('url')
-        # self.timers.start()  注释掉预约成功了
-        while True:
-            try:
-                self.session.get(url='https:' + reserve_url)
-                logger.info('预约成功，已获得抢购资格 / 您已成功预约过了，无需重复预约')
-                # if global_config.getRaw('messenger', 'enable') == 'true':
-                #     success_message = "预约成功，已获得抢购资格 / 您已成功预约过了，无需重复预约"
-                #     send_wechat(success_message)
-                break
-            except Exception as e:
-                logger.error('预约失败正在重试...')
+
+        # 预约商品列表
+        appointment_sku_ids = self.appointment_sku_ids.split(',')
+
+        # 循环预约商品
+        for sku_id in appointment_sku_ids:
+            payload = {
+                'callback': 'fetchJSON',
+                'sku': sku_id,
+                '_': str(int(time.time() * 1000)),
+            }
+            headers = {
+                'User-Agent': self.user_agent,
+                'Referer': 'https://item.jd.com/{}.html'.format(sku_id),
+            }
+            resp = self.session.get(url=url, params=payload, headers=headers)
+            resp_json = parse_json(resp.text)
+            reserve_url = resp_json.get('url')
+            # self.timers.start()  注释掉预约成功了
+            logger.info('预约商品编号:{}'.format(sku_id))
+            while True:
+                try:
+                    self.session.get(url='https:' + reserve_url)
+                    logger.info('预约成功，已获得抢购资格 / 您已成功预约过了，无需重复预约')
+                    # if global_config.getRaw('messenger', 'enable') == 'true':
+                    #     success_message = "预约成功，已获得抢购资格 / 您已成功预约过了，无需重复预约"
+                    #     send_wechat(success_message)
+                    break
+                except Exception as e:
+                    logger.error('预约失败正在重试...')
 
     def get_username(self):
         """获取用户信息"""
@@ -416,7 +429,7 @@ class JdSeckill(object):
 
     def get_sku_title(self):
         """获取商品名称"""
-        url = 'https://item.jd.com/{}.html'.format(global_config.getRaw('config', 'sku_id'))
+        url = 'https://item.jd.com/{}.html'.format(self.sku_id)
         resp = self.session.get(url).content
         x_data = etree.HTML(resp)
         sku_title = x_data.xpath('/html/head/title/text()')
